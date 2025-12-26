@@ -1,186 +1,111 @@
-import { useState, useEffect, useRef } from "react";
-import { db } from "./firebase";
-import {
-  collection,
-  addDoc,
-  query,
-  orderBy,
-  onSnapshot,
-  serverTimestamp,
-} from "firebase/firestore";
+import { useState, useEffect } from 'react'
+import { db } from './firebase'
+import { collection, addDoc, onSnapshot, query, orderBy, serverTimestamp } from 'firebase/firestore'
 
-export default function App() {
-  const [messages, setMessages] = useState([]);
-  const [inputText, setInputText] = useState("");
-  const [myId, setMyId] = useState("");
-  const [logs, setLogs] = useState([]); 
-  const scrollRef = useRef(null);
-  const logScrollRef = useRef(null);
+function App() {
+  const [messages, setMessages] = useState([])
+  const [newMessage, setNewMessage] = useState('')
+  const [username, setUsername] = useState('')
+  const [isLoggedIn, setIsLoggedIn] = useState(false)
 
-  // --- SOUNDS ---
-  const playPop = () => {
-    const audio = new Audio("https://assets.mixkit.co/active_storage/sfx/2358/2358-preview.mp3");
-    audio.volume = 0.2;
-    audio.play().catch(() => {}); 
-  };
-
-  const playType = () => {
-    const audio = new Audio("https://assets.mixkit.co/active_storage/sfx/2544/2544-preview.mp3"); 
-    audio.volume = 0.3;
-    audio.currentTime = 0;
-    audio.play().catch(() => {});
-  };
-
-  // --- SETUP ---
   useEffect(() => {
-    const savedId = localStorage.getItem("underground_id") || "PROJECT_MAYHEM_" + Math.floor(100 + Math.random() * 900);
-    localStorage.setItem("underground_id", savedId);
-    setMyId(savedId);
-
-    // --- PHILOSOPHY / RESISTANCE QUOTES ---
-    const resistanceQuotes = [
-      { text: "It's only after we've lost everything that we're free to do anything.", author: "TYLER" },
-      { text: "The things you own end up owning you.", author: "DURDEN" },
-      { text: "I am a cage, in search of a bird.", author: "KAFKA" },
-      { text: "To go wrong in one's own way is better than to go right in someone else's.", author: "DOSTOEVSKY" },
-      { text: "No need to hurry. No need to sparkle. Just be.", author: "WOOLF" },
-      { text: "The individual has always had to struggle to keep from being overwhelmed by the tribe.", author: "NIETZSCHE" },
-      { text: "Man is the only creature who refuses to be what he is.", author: "CAMUS" },
-      { text: "If you want to save the world, you must save it from the system.", author: "UNKNOWN" },
-      { text: "This is your life, and it's ending one minute at a time.", author: "FIGHT CLUB" },
-      { text: "Pain is the price of being alive.", author: "PLATH" }
-    ];
-
-    const interval = setInterval(() => {
-      const randomQ = resistanceQuotes[Math.floor(Math.random() * resistanceQuotes.length)];
-      
-      // Creating the log line with Quote and Author
-      const newLog = "> " + randomQ.text + " [" + randomQ.author + "]";
-      
-      setLogs(prev => [...prev.slice(-8), newLog]); 
-      if (logScrollRef.current) logScrollRef.current.scrollTop = logScrollRef.current.scrollHeight;
-    }, 5000); 
-
-    return () => clearInterval(interval);
-  }, []);
-
-  // --- FIREBASE LISTENER ---
-  useEffect(() => {
-    const q = query(collection(db, "chats"), orderBy("timestamp", "asc"));
+    const q = query(collection(db, "messages"), orderBy("createdAt"))
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      const data = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
-      
-      setMessages((prev) => {
-        if (prev.length > 0 && data.length > prev.length) {
-          const lastMsg = data[data.length - 1];
-          if (lastMsg.userId !== myId) playPop();
-        }
-        return data;
-      });
-      
-      setTimeout(() => scrollRef.current?.scrollIntoView({ behavior: "smooth" }), 100);
-    });
+      setMessages(snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id })))
+    })
+    return () => unsubscribe()
+  }, [])
 
-    return () => unsubscribe();
-  }, [myId]);
-
-  const sendMessage = async () => {
-    if (!inputText.trim()) return;
-    
-    const textToSend = inputText; 
-    setInputText(""); 
-
-    try {
-      await addDoc(collection(db, "chats"), {
-        text: textToSend,
-        userId: myId,
-        timestamp: serverTimestamp(),
-      });
-    } catch (error) {
-      console.error("Error:", error);
+  const handleLogin = (e) => {
+    e.preventDefault()
+    if (username.trim()) {
+      setIsLoggedIn(true)
     }
-  };
+  }
 
-  const handleInputChange = (e) => {
-    setInputText(e.target.value);
-    playType();
-  };
+  const sendMessage = async (e) => {
+    e.preventDefault()
+    if (!newMessage.trim()) return
 
-  return (
-    <div className="min-h-screen bg-black text-[#4ade80] font-mono flex overflow-hidden relative">
-      
-      {/* GRID BACKGROUND (Subtle) */}
-      <div className="absolute inset-0 pointer-events-none opacity-10 bg-[linear-gradient(rgba(0,255,0,0.1)_1px,transparent_1px),linear-gradient(90deg,rgba(0,255,0,0.1)_1px,transparent_1px)] bg-[length:20px_20px]" />
+    await addDoc(collection(db, "messages"), {
+      text: newMessage,
+      user: username,
+      createdAt: serverTimestamp()
+    })
+    setNewMessage('')
+  }
 
-      {/* --- LEFT SIDE: MAIN TERMINAL --- */}
-      <div className="flex-1 flex flex-col p-4 border-r border-[#4ade80]/30 relative z-10">
-        
-        {/* HEADER: Old School Minimalist */}
-        <header className="border-b border-[#4ade80] pb-2 mb-4 flex justify-between items-end">
-          <div>
-            <h1 className="text-2xl font-bold tracking-widest uppercase">UNDERGROUND_NET</h1>
-            <div className="text-xs mt-1 opacity-70">USER_SYSTEM: {myId}</div>
-          </div>
-          <div className="text-xs bg-[#4ade80] text-black px-1 font-bold">CONN: SECURE</div>
-        </header>
-
-        {/* CHAT MESSAGES */}
-        <div className="flex-1 overflow-y-auto space-y-4 pr-2 custom-scrollbar">
-          {messages.map((msg) => (
-            <div key={msg.id} className="mb-2">
-              <div className="text-[10px] opacity-50 mb-1">
-                {msg.userId === myId ? ">> ORIGIN: YOU" : ">> PEER: " + msg.userId}
-              </div>
-              {/* SHARP GREEN TEXT (No Glow) */}
-              <p className="text-lg md:text-xl font-bold leading-relaxed break-words text-[#4ade80]">
-                {msg.text}
-              </p>
-            </div>
-          ))}
-          <div ref={scrollRef} />
-        </div>
-
-        {/* INPUT AREA: Flat, No Glow */}
-        <div className="mt-4 flex gap-2 border-t border-[#4ade80] pt-4">
-          <span className="text-xl animate-pulse">{">"}</span>
+  // ലോഗിൻ സ്ക്രീൻ
+  if (!isLoggedIn) {
+    return (
+      <div className="flex items-center justify-center h-screen bg-black text-green-500 font-mono">
+        <form onSubmit={handleLogin} className="p-10 border-2 border-green-500 rounded-lg text-center shadow-[0_0_20px_rgba(0,255,0,0.3)]">
+          <h1 className="text-3xl mb-8 font-bold tracking-widest">IDENTIFY YOURSELF</h1>
           <input
             type="text"
-            value={inputText}
-            onChange={handleInputChange}
-            onKeyDown={(e) => e.key === "Enter" && sendMessage()}
-            placeholder="INITIATE PROTOCOL..."
-            className="flex-1 bg-transparent text-xl outline-none text-[#4ade80] placeholder:text-[#4ade80]/30 uppercase font-bold"
-            autoFocus
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
+            placeholder="Enter Codename..."
+            className="bg-black border-b-2 border-green-500 p-2 outline-none text-center w-full text-xl mb-8 placeholder-green-800 focus:border-green-300 transition"
           />
-          <button
-            onClick={sendMessage}
-            className="border border-[#4ade80] px-6 hover:bg-[#4ade80] hover:text-black transition-colors font-bold uppercase text-sm"
-          >
-            ENTER
+          <button type="submit" className="bg-green-700 text-black px-8 py-2 font-bold hover:bg-green-500 hover:shadow-[0_0_10px_#00ff00] transition duration-300">
+            ENTER SYSTEM
           </button>
+        </form>
+      </div>
+    )
+  }
+
+  // ചാറ്റ് സ്ക്രീൻ
+  return (
+    <div className="flex flex-col h-screen bg-black text-green-500 font-mono p-2 sm:p-4">
+      
+      {/* തലക്കെട്ട് */}
+      <div className="border-b border-green-800 pb-4 mb-4 flex justify-between items-end">
+        <div>
+          <h1 className="text-xl sm:text-2xl font-bold tracking-widest text-green-400">UNDERGROUND_NET</h1>
+          <p className="text-xs text-green-800">SECURE CONNECTION ESTABLISHED</p>
+        </div>
+        <div className="text-right">
+           <span className="text-xs text-green-600 block">OPERATIVE</span>
+           <span className="font-bold text-green-300">{username}</span>
         </div>
       </div>
 
-      {/* --- RIGHT SIDE: RESISTANCE FEED (Visible on Desktop) --- */}
-      <div className="hidden md:flex w-1/3 flex-col p-4 bg-black text-xs text-[#4ade80] font-mono border-l border-[#4ade80]/20 z-0">
-        <h2 className="border-b border-[#4ade80]/30 mb-2 pb-1 uppercase tracking-widest opacity-50">
-          RESISTANCE_LOGS
-        </h2>
-        
-        {/* Quotes will appear here instead of Sync Packets */}
-        <div className="flex-1 overflow-hidden flex flex-col justify-end space-y-3" ref={logScrollRef}>
-          {logs.map((log, i) => (
-            <div key={i} className="opacity-70 border-l border-[#4ade80]/40 pl-2 italic">
-              {log}
+      {/* മെസ്സേജുകൾ കാണിക്കുന്ന സ്ഥലം */}
+      <div className="flex-1 overflow-y-auto mb-4 space-y-4 pr-2">
+        {messages.map((msg) => (
+          <div key={msg.id} style={{
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: msg.user === username ? 'flex-end' : 'flex-start'
+          }}>
+            <span className="text-[10px] text-green-700 mb-1 px-1">{msg.user || 'Unknown'}</span>
+            <div className={`max-w-[80%] px-4 py-2 rounded-lg ${
+              msg.user === username 
+                ? 'bg-green-900 text-green-100 rounded-tr-none' 
+                : 'border border-green-800 text-green-400 rounded-tl-none'
+            }`}>
+              {msg.text}
             </div>
-          ))}
-        </div>
-        
-        <div className="mt-4 pt-2 border-t border-[#4ade80]/20 text-[10px] text-center opacity-40">
-           WE ARE THE ALL SINGING, ALL DANCING CRAP OF THE WORLD.
-        </div>
+          </div>
+        ))}
       </div>
 
+      {/* മെസ്സേജ് ടൈപ്പ് ചെയ്യുന്ന സ്ഥലം */}
+      <form onSubmit={sendMessage} className="flex gap-2 border-t border-green-900 pt-4">
+        <input
+          value={newMessage}
+          onChange={(e) => setNewMessage(e.target.value)}
+          className="flex-1 bg-gray-900 border border-green-800 rounded p-3 outline-none focus:border-green-500 focus:bg-black transition text-green-300 placeholder-green-800"
+          placeholder="Type encrypted message..."
+        />
+        <button type="submit" className="bg-green-800 text-black px-6 rounded font-bold hover:bg-green-500 transition shadow-[0_0_10px_rgba(0,255,0,0.2)]">
+          SEND
+        </button>
+      </form>
     </div>
-  );
+  )
 }
+
+export default App
