@@ -1,14 +1,22 @@
-import { useState, useEffect } from 'react'
-import { db } from './firebase'
-import { collection, addDoc, setDoc, doc, onSnapshot, query, orderBy, serverTimestamp } from 'firebase/firestore'
+import { useState, useEffect } from "react"
+import { db } from "./firebase"
+import { collection, addDoc, setDoc, doc, onSnapshot, query, orderBy, serverTimestamp } from "firebase/firestore"
 
 function App() {
   const [messages, setMessages] = useState([])
   const [users, setUsers] = useState([])
-  const [newMessage, setNewMessage] = useState('')
-  const [username, setUsername] = useState('')
+  const [newMessage, setNewMessage] = useState("")
+  const [username, setUsername] = useState("")
   const [isLoggedIn, setIsLoggedIn] = useState(false)
   const [recipient, setRecipient] = useState(null)
+
+  useEffect(() => {
+    const savedUser = localStorage.getItem("hacker_username")
+    if (savedUser) {
+      setUsername(savedUser)
+      setIsLoggedIn(true)
+    }
+  }, [])
 
   useEffect(() => {
     const q = query(collection(db, "messages"), orderBy("createdAt"))
@@ -29,11 +37,18 @@ function App() {
     e.preventDefault()
     if (username.trim()) {
       setIsLoggedIn(true)
+      localStorage.setItem("hacker_username", username)
       await setDoc(doc(db, "users", username), {
         name: username,
         status: "online"
       })
     }
+  }
+
+  const handleLogout = () => {
+    localStorage.removeItem("hacker_username")
+    setIsLoggedIn(false)
+    setUsername("")
   }
 
   const sendMessage = async (e) => {
@@ -46,7 +61,7 @@ function App() {
       to: recipient,
       createdAt: serverTimestamp()
     })
-    setNewMessage('')
+    setNewMessage("")
   }
 
   const filteredMessages = messages.filter(msg => {
@@ -58,11 +73,9 @@ function App() {
     }
   })
 
-  // സ്റ്റൈലുകൾ (Quotes മാത്രം ഉപയോഗിക്കുന്നു)
   const glowStyle = { textShadow: "0 0 10px rgba(74, 222, 128, 0.7)" }
   const borderGlow = { boxShadow: "0 0 15px rgba(74, 222, 128, 0.2), inset 0 0 10px rgba(74, 222, 128, 0.1)" }
   
-  // സ്ക്രീൻ വരികൾ
   const scanlineLayer = (
     <div className="pointer-events-none fixed inset-0 z-50 opacity-20" 
          style={{ background: "linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06))", backgroundSize: "100% 2px, 3px 100%" }}>
@@ -100,11 +113,15 @@ function App() {
     <div className="flex h-screen bg-black text-green-400 font-mono overflow-hidden relative">
       {scanlineLayer}
       
-      {/* SIDEBAR */}
       <div className="w-1/3 border-r border-green-800 flex flex-col bg-black/50 z-10 backdrop-blur-sm">
-        <div className="p-4 border-b border-green-800 bg-green-900/10">
-          <h2 className="font-bold tracking-[0.2em] text-xs text-green-600 mb-1">CURRENT USER</h2>
-          <div className="text-xl font-bold truncate" style={glowStyle}>{username}</div>
+        <div className="p-4 border-b border-green-800 bg-green-900/10 flex justify-between items-center">
+          <div>
+            <h2 className="font-bold tracking-[0.2em] text-xs text-green-600 mb-1">CURRENT USER</h2>
+            <div className="text-xl font-bold truncate" style={glowStyle}>{username}</div>
+          </div>
+          <button onClick={handleLogout} className="text-[10px] border border-red-500 text-red-500 px-2 py-1 hover:bg-red-500 hover:text-black transition">
+            EXIT
+          </button>
         </div>
         
         <div className="flex-1 overflow-y-auto">
@@ -132,7 +149,6 @@ function App() {
         </div>
       </div>
 
-      {/* CHAT AREA */}
       <div className="flex-1 flex flex-col z-10">
         <div className="p-4 border-b border-green-800 bg-black/90 flex justify-between items-center shadow-[0_5px_20px_rgba(0,0,0,0.5)]">
           <div>
