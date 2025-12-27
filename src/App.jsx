@@ -8,7 +8,7 @@ function App() {
   const [messages, setMessages] = useState([])
   const [groups, setGroups] = useState([])
   const [users, setUsers] = useState([])
-  const [comments, setComments] = useState([]) // Store all comments
+  const [comments, setComments] = useState([])
   
   const [username, setUsername] = useState("")
   const [password, setPassword] = useState("")
@@ -22,11 +22,11 @@ function App() {
   const [groupAccessInput, setGroupAccessInput] = useState("")
   const [groupError, setGroupError] = useState("")
 
-  // Interaction States
-  const [expandedComments, setExpandedComments] = useState({}) // Which posts have comments open
-  const [commentInputs, setCommentInputs] = useState({}) // Text input for each post
+  // Interaction
+  const [expandedComments, setExpandedComments] = useState({}) 
+  const [commentInputs, setCommentInputs] = useState({})
 
-  // Create Group State
+  // Group Creation
   const [isCreatingGroup, setIsCreatingGroup] = useState(false)
   const [newGroupName, setNewGroupName] = useState("")
   const [newGroupPass, setNewGroupPass] = useState("")
@@ -34,17 +34,19 @@ function App() {
   const [chatMode, setChatMode] = useState("GLOBAL") 
   const [recipient, setRecipient] = useState(null) 
 
+  // Content Inputs
   const [postContent, setPostContent] = useState("")
+  const [postImage, setPostImage] = useState("") 
+
   const [chatContent, setChatContent] = useState("")
+  const [chatImage, setChatImage] = useState("") 
+
   const [groupMsgContent, setGroupMsgContent] = useState("")
 
   // --- EFFECTS ---
   useEffect(() => {
     const savedUser = localStorage.getItem("hacker_username")
-    if (savedUser) {
-      setUsername(savedUser)
-      setIsLoggedIn(true)
-    }
+    if (savedUser) { setUsername(savedUser); setIsLoggedIn(true) }
   }, [])
 
   useEffect(() => {
@@ -71,7 +73,6 @@ function App() {
     return () => unsubscribe()
   }, [])
 
-  // New: Listen for Comments
   useEffect(() => {
     const q = query(collection(db, "comments"), orderBy("createdAt", "asc"))
     const unsubscribe = onSnapshot(q, (snapshot) => {
@@ -86,6 +87,22 @@ function App() {
     })
     return () => unsubscribe()
   }, [])
+
+  // --- IMAGE CONVERTER ---
+  const handleImageUpload = (e, targetState) => {
+    const file = e.target.files[0]
+    if (file) {
+      if (file.size > 500000) {
+        alert("FILE TOO LARGE! UPLOAD SMALLER IMAGE (< 500KB)")
+        return
+      }
+      const reader = new FileReader()
+      reader.onloadend = () => {
+        targetState(reader.result)
+      }
+      reader.readAsDataURL(file)
+    }
+  }
 
   // --- AUTH ACTIONS ---
   const handleAuth = async (e) => {
@@ -141,16 +158,12 @@ function App() {
     else { setGroupError("INVALID_PASSCODE") }
   }
 
-  // --- INTERACTION ACTIONS (NEW) ---
+  // --- INTERACTION ACTIONS ---
   const handleVouch = async (post) => {
     const postRef = doc(db, "posts", post.id)
     const isVouched = post.vouchedBy && post.vouchedBy.includes(username)
-    
-    if (isVouched) {
-      await updateDoc(postRef, { vouchedBy: arrayRemove(username) })
-    } else {
-      await updateDoc(postRef, { vouchedBy: arrayUnion(username) })
-    }
+    if (isVouched) { await updateDoc(postRef, { vouchedBy: arrayRemove(username) }) } 
+    else { await updateDoc(postRef, { vouchedBy: arrayUnion(username) }) }
   }
 
   const toggleComments = (postId) => {
@@ -161,31 +174,38 @@ function App() {
     e.preventDefault()
     const text = commentInputs[postId]
     if (!text || !text.trim()) return
-
-    await addDoc(collection(db, "comments"), {
-      postId: postId,
-      text: text,
-      user: username,
-      createdAt: serverTimestamp()
-    })
-    
+    await addDoc(collection(db, "comments"), { postId: postId, text: text, user: username, createdAt: serverTimestamp() })
     setCommentInputs(prev => ({ ...prev, [postId]: "" }))
   }
 
-  // --- SUBMIT MESSAGES ---
+  // --- SUBMIT WITH IMAGE ---
   const handlePostSubmit = async (e) => {
     e.preventDefault()
-    if (!postContent.trim()) return
-    await addDoc(collection(db, "posts"), { content: postContent, user: username, vouchedBy: [], createdAt: serverTimestamp() })
+    if (!postContent.trim() && !postImage.trim()) return
+    await addDoc(collection(db, "posts"), { 
+      content: postContent, 
+      image: postImage, 
+      user: username, 
+      vouchedBy: [], 
+      createdAt: serverTimestamp() 
+    })
     setPostContent("")
+    setPostImage("")
   }
 
   const handleChatSubmit = async (e) => {
     e.preventDefault()
-    if (!chatContent.trim()) return
+    if (!chatContent.trim() && !chatImage.trim()) return
     const toUser = chatMode === "PRIVATE" ? recipient : null
-    await addDoc(collection(db, "messages"), { text: chatContent, user: username, to: toUser, createdAt: serverTimestamp() })
+    await addDoc(collection(db, "messages"), { 
+      text: chatContent, 
+      image: chatImage,
+      user: username, 
+      to: toUser, 
+      createdAt: serverTimestamp() 
+    })
     setChatContent("")
+    setChatImage("")
   }
 
   const handleGroupMsgSubmit = async (e) => {
@@ -202,9 +222,7 @@ function App() {
     return (msg.user === username && msg.to === recipient) || (msg.user === recipient && msg.to === username)
   })
   const currentGroupMessages = messages.filter(msg => selectedGroup && msg.groupId === selectedGroup.id)
-
-  // --- LOGIN UI ---
-  if (!isLoggedIn) {
+if (!isLoggedIn) {
     return (
       <div className="flex items-center justify-center h-screen bg-black text-green-400 font-mono">
         <div className="w-full max-w-md p-8 border border-green-500/50 bg-green-900/10">
@@ -221,7 +239,6 @@ function App() {
     )
   }
 
-  // --- MAIN UI ---
   return (
     <div className="flex h-screen bg-black text-green-400 font-mono overflow-hidden">
       
@@ -265,7 +282,17 @@ function App() {
                <div className="border-b border-green-900/50 pb-4 mb-4">
                  <form onSubmit={handlePostSubmit}>
                    <textarea value={postContent} onChange={(e) => setPostContent(e.target.value)} className="w-full bg-black border border-green-800 p-3 outline-none text-sm text-green-300 h-20 resize-none" placeholder="BROADCAST TO WALL..." />
-                   <button className="mt-2 bg-green-900/40 px-4 py-1 border border-green-600 text-[10px] float-right hover:bg-green-500 hover:text-black">POST</button>
+                   
+                   {/* REAL FILE UPLOAD */}
+                   <div className="flex justify-between items-center mt-2 border-t border-green-900/30 pt-2">
+                     <label className="text-[10px] flex items-center gap-2 cursor-pointer bg-green-900/20 border border-green-900 px-2 py-1 hover:bg-green-900/40">
+                       <span>📷 ATTACH_IMG</span>
+                       <input type="file" accept="image/*" onChange={(e) => handleImageUpload(e, setPostImage)} className="hidden" />
+                     </label>
+                     {postImage && <span className="text-[9px] text-green-500">IMAGE LOADED ✅</span>}
+                     <button className="bg-green-900/40 px-4 py-1 border border-green-600 text-[10px] font-bold hover:bg-green-500 hover:text-black">POST</button>
+                   </div>
+
                  </form>
                </div>
                
@@ -279,9 +306,12 @@ function App() {
                      <div className="text-[10px] text-green-500 font-bold mb-2 flex justify-between">
                         <span>{post.user}</span><span className="opacity-50">ID: {post.id.slice(0,4)}</span>
                      </div>
-                     <div className="text-sm text-gray-300 leading-relaxed mb-4">{post.content}</div>
-                     
-                     {/* ACTIONS */}
+                     <div className="text-sm text-gray-300 leading-relaxed mb-2">{post.content}</div>
+                     {post.image && (
+                       <div className="mb-4 border border-green-900/30">
+                         <img src={post.image} alt="attached" className="max-h-60 opacity-80 hover:opacity-100" />
+                       </div>
+                     )}
                      <div className="flex gap-4 border-t border-green-900/30 pt-2">
                        <button onClick={() => handleVouch(post)} className={"text-[10px] font-bold uppercase flex items-center gap-1 " + (hasVouched ? "text-green-400" : "text-gray-600 hover:text-green-500")}>
                          [ {hasVouched ? "-1 UNVOUCH" : "+1 VOUCH"} ] <span className="bg-green-900/50 px-1 text-white">{vouchCount}</span>
@@ -290,23 +320,15 @@ function App() {
                          [ COMMENTS ({postComments.length}) ]
                        </button>
                      </div>
-
-                     {/* COMMENTS SECTION */}
                      {expandedComments[post.id] && (
                        <div className="mt-3 bg-black/50 p-2 border-l-2 border-green-900/50">
                          {postComments.map(c => (
                            <div key={c.id} className="mb-2 text-xs">
-                             <span className="text-green-600 font-bold">{c.user}: </span>
-                             <span className="text-gray-400">{c.text}</span>
+                             <span className="text-green-600 font-bold">{c.user}: </span><span className="text-gray-400">{c.text}</span>
                            </div>
                          ))}
                          <form onSubmit={(e) => handleCommentSubmit(e, post.id)} className="flex gap-2 mt-2">
-                           <input 
-                             value={commentInputs[post.id] || ""} 
-                             onChange={(e) => setCommentInputs({...commentInputs, [post.id]: e.target.value})}
-                             className="flex-1 bg-zinc-900 border border-green-900/50 p-1 text-xs text-green-300 outline-none"
-                             placeholder="REPLY..."
-                           />
+                           <input value={commentInputs[post.id] || ""} onChange={(e) => setCommentInputs({...commentInputs, [post.id]: e.target.value})} className="flex-1 bg-zinc-900 border border-green-900/50 p-1 text-xs text-green-300 outline-none" placeholder="REPLY..." />
                            <button className="text-[9px] bg-green-900 px-2 text-white">SEND</button>
                          </form>
                        </div>
@@ -332,7 +354,6 @@ function App() {
           {activeTab === "group_active" && (
             <>
                <div className="flex-1 space-y-3 mb-4">
-                 {currentGroupMessages.length === 0 && <div className="text-center text-gray-600 text-xs mt-10">CHANNEL SILENT.</div>}
                  {currentGroupMessages.map(msg => (
                    <div key={msg.id} className={"flex flex-col " + (msg.user === username ? "items-end" : "items-start")}>
                      <div className="text-[9px] text-green-700 mb-1">{msg.user}</div>
@@ -369,17 +390,31 @@ function App() {
               {chatMode === "PRIVATE" && <button onClick={()=>setRecipient(null)} className="text-[9px] text-green-500 mb-2">{"< BACK"}</button>}
               {(chatMode === "GLOBAL" ? globalMessages : privateMessages).map(msg => (
                 <div key={msg.id} className="mb-2">
-                  <span className="text-[9px] text-green-600 font-bold">{msg.user}: </span><span className="text-xs text-green-400 break-words">{msg.text}</span>
+                  <div className="flex items-center gap-1">
+                     <span className="text-[9px] text-green-600 font-bold">{msg.user}: </span>
+                     {msg.text && <span className="text-xs text-green-400 break-words">{msg.text}</span>}
+                  </div>
+                  {msg.image && <img src={msg.image} className="mt-1 max-w-[80%] border border-green-900/30 opacity-70" alt="img" />}
                 </div>
               ))}
             </>
           )}
         </div>
         {(chatMode === "GLOBAL" || recipient) && (
-          <form onSubmit={handleChatSubmit} className="p-2 border-t border-green-900/50 flex gap-1">
-            <input value={chatContent} onChange={(e) => setChatContent(e.target.value)} className="flex-1 bg-zinc-900 border border-green-900 p-2 outline-none text-xs text-green-400" placeholder="..." />
-            <button className="text-green-500 font-bold px-2">{">"}</button>
-          </form>
+          <div className="p-2 border-t border-green-900/50 bg-black">
+             {/* CHAT IMAGE BUTTON */}
+             <div className="mb-1 flex justify-between items-center">
+               <label className="text-[8px] text-green-600 cursor-pointer border border-green-900 px-1 hover:bg-green-900/20">
+                 [ + IMG ]
+                 <input type="file" accept="image/*" onChange={(e) => handleImageUpload(e, setChatImage)} className="hidden" />
+               </label>
+               {chatImage && <span className="text-[8px] text-green-400">READY ✅</span>}
+             </div>
+             <form onSubmit={handleChatSubmit} className="flex gap-1">
+                <input value={chatContent} onChange={(e) => setChatContent(e.target.value)} className="flex-1 bg-zinc-900 border border-green-900 p-2 outline-none text-xs text-green-400" placeholder="..." />
+                <button className="text-green-500 font-bold px-2">{">"}</button>
+             </form>
+          </div>
         )}
       </div>
 
