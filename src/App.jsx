@@ -1,16 +1,21 @@
 import { useState, useEffect } from "react"
 import { db } from "./firebase"
-import { collection, addDoc, onSnapshot, query, orderBy, serverTimestamp, setDoc, doc } from "firebase/firestore"
+import { collection, addDoc, onSnapshot, query, orderBy, serverTimestamp, setDoc, doc, getDoc } from "firebase/firestore"
 
 function App() {
   const [activeTab, setActiveTab] = useState("wall")
   const [posts, setPosts] = useState([])
   const [messages, setMessages] = useState([])
-  const [newContent, setNewContent] = useState("")
-  const [username, setUsername] = useState("")
-  const [isLoggedIn, setIsLoggedIn] = useState(false)
-  const [recipient, setRecipient] = useState(null)
   const [users, setUsers] = useState([])
+  
+  const [username, setUsername] = useState("")
+  const [password, setPassword] = useState("")
+  const [isLoggedIn, setIsLoggedIn] = useState(false)
+  const [authError, setAuthError] = useState("")
+  const [isRegistering, setIsRegistering] = useState(false) 
+
+  const [newContent, setNewContent] = useState("")
+  const [recipient, setRecipient] = useState(null)
 
   useEffect(() => {
     const savedUser = localStorage.getItem("hacker_username")
@@ -43,13 +48,54 @@ function App() {
     return () => unsubscribe()
   }, [])
 
-  const handleLogin = async (e) => {
+  const handleAuth = async (e) => {
     e.preventDefault()
-    if (username.trim()) {
-      setIsLoggedIn(true)
-      localStorage.setItem("hacker_username", username)
-      await setDoc(doc(db, "users", username), { name: username })
+    setAuthError("")
+    
+    if (!username.trim() || !password.trim()) {
+      setAuthError("CREDENTIALS_REQUIRED")
+      return
     }
+
+    const userRef = doc(db, "users", username)
+    const userSnap = await getDoc(userRef)
+
+    if (isRegistering) {
+      if (userSnap.exists()) {
+        setAuthError("CODENAME_ALREADY_TAKEN")
+      } else {
+        await setDoc(userRef, { 
+          name: username, 
+          password: password, 
+          joinedAt: serverTimestamp() 
+        })
+        completeLogin()
+      }
+    } else {
+      if (userSnap.exists()) {
+        if (userSnap.data().password === password) {
+          completeLogin()
+        } else {
+          setAuthError("ACCESS_DENIED: WRONG PASSWORD")
+        }
+      } else {
+        setAuthError("USER_NOT_FOUND. SWITCH TO REGISTER?")
+      }
+    }
+  }
+
+  const completeLogin = () => {
+    localStorage.setItem("hacker_username", username)
+    setIsLoggedIn(true)
+    setAuthError("")
+  }
+
+  const handleLogout = () => {
+    localStorage.removeItem("hacker_username")
+    setIsLoggedIn(false)
+    setUsername("")
+    setPassword("")
+    setRecipient(null)
   }
 
   const handleSubmit = async (e) => {
@@ -68,31 +114,83 @@ function App() {
   if (!isLoggedIn) {
     return (
       <div className="flex items-center justify-center h-screen bg-black text-green-400 font-mono">
-        <form onSubmit={handleLogin} className="p-10 border border-green-500 w-full max-w-md">
-          <h1 className="text-2xl mb-8 font-bold text-center tracking-tighter">NETWORK_ACCESS</h1>
-          <input type="text" value={username} onChange={(e) => setUsername(e.target.value)} placeholder="ENTER_CODENAME..." className="w-full bg-black border-b border-green-500 p-2 outline-none mb-6" />
-          <button className="w-full border border-green-500 py-3 hover:bg-green-500 hover:text-black font-bold">START</button>
-        </form>
+        <div className="w-full max-w-md p-8 border border-green-500/50 bg-green-900/10 shadow-[0_0_20px_rgba(0,255,0,0.1)]">
+          <h1 className="text-3xl mb-6 font-bold text-center tracking-widest text-green-500">
+            {isRegistering ? "NEW_AGENT_REGISTRATION" : "SECURE_NET_ACCESS"}
+          </h1>
+          
+          <form onSubmit={handleAuth} className="space-y-6">
+            <div>
+              <label className="text-xs uppercase tracking-widest opacity-70">Codename</label>
+              <input 
+                type="text" 
+                value={username} 
+                onChange={(e) => setUsername(e.target.value)} 
+                className="w-full bg-black border-b border-green-500 p-2 outline-none text-lg focus:border-white transition-colors"
+                placeholder="ENTER_ID..." 
+              />
+            </div>
+            
+            <div>
+              <label className="text-xs uppercase tracking-widest opacity-70">Passcode</label>
+              <input 
+                type="password" 
+                value={password} 
+                onChange={(e) => setPassword(e.target.value)} 
+                className="w-full bg-black border-b border-green-500 p-2 outline-none text-lg focus:border-white transition-colors"
+                placeholder="**" 
+              />
+            </div>
+
+            {authError && (
+              <div className="text-red-500 text-xs font-bold border border-red-500/50 p-2 bg-red-900/10 text-center">
+                {"ERROR: " + authError}
+              </div>
+            )}
+
+            <button className="w-full border border-green-500 py-3 bg-green-900/20 hover:bg-green-500 hover:text-black font-bold tracking-widest transition-all">
+              {isRegistering ? "INITIALIZE_IDENTITY" : "AUTHENTICATE"}
+            </button>
+          </form>
+
+          <div className="mt-6 text-center">
+            <button 
+              onClick={() => { setIsRegistering(!isRegistering); setAuthError(""); }} 
+              className="text-xs text-green-600 hover:text-green-400 underline underline-offset-4"
+            >
+              {isRegistering ? "[ RETURN TO LOGIN ]" : "[ CREATE NEW IDENTITY ]"}
+            </button>
+          </div>
+        </div>
       </div>
     )
   }
 
   return (
     <div className="flex h-screen bg-black text-green-400 font-mono overflow-hidden">
-      <div className="w-1/4 border-r border-green-900 flex flex-col bg-zinc-950">
-        <div className="p-4 border-b border-green-900 font-bold text-xs truncate">AGENT: {username}</div>
-        <div className="flex flex-col p-2 space-y-2">
-          <button onClick={() => setActiveTab("wall")} className={"text-left p-3 text-[10px] " + (activeTab === "wall" ? "bg-green-900/30 border-l-2 border-green-500" : "opacity-40")}>[PUBLIC_WALL]</button>
-          <button onClick={() => setActiveTab("chat")} className={"text-left p-3 text-[10px] " + (activeTab === "chat" ? "bg-green-900/30 border-l-2 border-green-500" : "opacity-40")}>[SECURE_CHAT]</button>
-        </div>
-        {activeTab === "chat" && (
-          <div className="mt-4 border-t border-green-900 p-2 overflow-y-auto">
-            <div onClick={() => setRecipient(null)} className={"p-2 text-[10px] cursor-pointer " + (recipient === null ? "text-white" : "opacity-40")}># GLOBAL_CHAT</div>
-            {users.filter(u => u.name !== username).map(u => (
-              <div key={u.name} onClick={() => setRecipient(u.name)} className={"p-2 text-[10px] cursor-pointer " + (recipient === u.name ? "text-white" : "opacity-40")}>@ {u.name}</div>
-            ))}
+      <div className="w-1/4 border-r border-green-900 flex flex-col bg-zinc-950 justify-between">
+        <div>
+          <div className="p-4 border-b border-green-900 font-bold text-xs truncate text-green-500 flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
+            {"AGENT: " + username}
           </div>
-        )}
+          <div className="flex flex-col p-2 space-y-2">
+            <button onClick={() => setActiveTab("wall")} className={"text-left p-3 text-[10px] " + (activeTab === "wall" ? "bg-green-900/30 border-l-2 border-green-500" : "opacity-40")}>[PUBLIC_WALL]</button>
+            <button onClick={() => setActiveTab("chat")} className={"text-left p-3 text-[10px] " + (activeTab === "chat" ? "bg-green-900/30 border-l-2 border-green-500" : "opacity-40")}>[SECURE_CHAT]</button>
+          </div>
+          {activeTab === "chat" && (
+            <div className="mt-4 border-t border-green-900 p-2 overflow-y-auto max-h-80">
+              <div onClick={() => setRecipient(null)} className={"p-2 text-[10px] cursor-pointer " + (recipient === null ? "text-white" : "opacity-40")}># GLOBAL_CHAT</div>
+              {users.filter(u => u.name !== username).map(u => (
+                <div key={u.name} onClick={() => setRecipient(u.name)} className={"p-2 text-[10px] cursor-pointer " + (recipient === u.name ? "text-white" : "opacity-40")}>{"@ " + u.name}</div>
+              ))}
+            </div>
+          )}
+        </div>
+        
+        <button onClick={handleLogout} className="p-4 border-t border-green-900 text-red-500 hover:bg-red-900/20 text-[10px] font-bold text-left transition-colors">
+          [ ABORT_SESSION ]
+        </button>
       </div>
 
       <div className="flex-1 flex flex-col">
@@ -103,7 +201,7 @@ function App() {
           {activeTab === "wall" ? (
             posts.map(post => (
               <div key={post.id} className="border border-green-900/50 p-4 bg-green-950/5">
-                <div className="text-[9px] text-green-700 mb-2 font-bold uppercase tracking-tighter">Source: {post.user} // Broadcasted</div>
+                <div className="text-[9px] text-green-700 mb-2 font-bold uppercase tracking-tighter">{"Source: " + post.user + " // Broadcasted"}</div>
                 <div className="text-sm leading-relaxed text-green-300">{post.content}</div>
               </div>
             ))
@@ -131,5 +229,4 @@ function App() {
     </div>
   )
 }
-
 export default App
