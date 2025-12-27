@@ -14,6 +14,10 @@ function App() {
   const [authError, setAuthError] = useState("")
   const [isRegistering, setIsRegistering] = useState(false) 
 
+  // New Chat States
+  const [chatMode, setChatMode] = useState("GLOBAL") // GLOBAL or PRIVATE
+  const [recipient, setRecipient] = useState(null) // For private chat
+
   // Separate inputs for Wall and Chat
   const [postContent, setPostContent] = useState("")
   const [chatContent, setChatContent] = useState("")
@@ -115,15 +119,31 @@ function App() {
   const handleChatSubmit = async (e) => {
     e.preventDefault()
     if (!chatContent.trim()) return
+    
+    // Determine target
+    const toUser = chatMode === "PRIVATE" ? recipient : null
+    
     await addDoc(collection(db, "messages"), { 
       text: chatContent, 
       user: username, 
+      to: toUser, // If null, it's global
       createdAt: serverTimestamp() 
     })
     setChatContent("")
   }
 
-  // --- LOGIN SCREEN (Unchanged) ---
+  // Filter messages based on mode
+  const displayedMessages = messages.filter(msg => {
+    if (chatMode === "GLOBAL") {
+      return !msg.to // Show only messages with no recipient
+    } else {
+      // Private mode: Show messages between me and recipient
+      if (!recipient) return false
+      return (msg.user === username && msg.to === recipient) || (msg.user === recipient && msg.to === username)
+    }
+  })
+
+  // --- LOGIN SCREEN ---
   if (!isLoggedIn) {
     return (
       <div className="flex items-center justify-center h-screen bg-black text-green-400 font-mono">
@@ -151,11 +171,11 @@ function App() {
     )
   }
 
-  // --- NEW 3-COLUMN LAYOUT ---
+  // --- MAIN LAYOUT ---
   return (
     <div className="flex h-screen bg-black text-green-400 font-mono overflow-hidden">
       
-      {/* 1. LEFT SIDEBAR (Menu & Profile) - 20% width */}
+      {/* 1. LEFT SIDEBAR */}
       <div className="w-1/5 border-r border-green-900/50 flex flex-col bg-zinc-950/50 hidden md:flex">
         <div className="p-6 border-b border-green-900/50">
           <div className="w-12 h-12 bg-green-900/30 rounded-full border border-green-500 flex items-center justify-center text-xl font-bold mb-2">
@@ -169,9 +189,9 @@ function App() {
         
         <div className="flex-1 p-4 space-y-2">
           <div className="text-[10px] text-gray-500 uppercase tracking-widest mb-2">Navigation</div>
-          <button className="w-full text-left p-2 hover:bg-green-900/20 border-l-2 border-green-500 text-xs font-bold">[ PUBLIC_WALL ]</button>
-          <button className="w-full text-left p-2 hover:bg-green-900/20 border-l-2 border-transparent text-xs opacity-50">[ MY_GROUPS ] (Locked)</button>
-          <button className="w-full text-left p-2 hover:bg-green-900/20 border-l-2 border-transparent text-xs opacity-50">[ SETTINGS ] (Locked)</button>
+          <button className="w-full text-left p-2 bg-green-900/20 border-l-2 border-green-500 text-xs font-bold">[ PUBLIC_WALL ]</button>
+          <button className="w-full text-left p-2 border-l-2 border-transparent text-xs opacity-50 cursor-not-allowed">[ MY_GROUPS ] (Locked)</button>
+          <button className="w-full text-left p-2 border-l-2 border-transparent text-xs opacity-50 cursor-not-allowed">[ SETTINGS ] (Locked)</button>
         </div>
 
         <button onClick={handleLogout} className="p-4 text-red-500 hover:bg-red-900/10 text-xs font-bold border-t border-green-900/50 text-left">
@@ -179,9 +199,8 @@ function App() {
         </button>
       </div>
 
-      {/* 2. CENTER STAGE (The Feed) - 55% width */}
+      {/* 2. CENTER STAGE (The Feed) */}
       <div className="flex-1 flex flex-col border-r border-green-900/50 bg-black relative">
-        {/* Post Input Area (Like FB Status Box) */}
         <div className="p-4 border-b border-green-900/50 bg-zinc-900/30">
           <form onSubmit={handlePostSubmit}>
             <textarea 
@@ -196,7 +215,6 @@ function App() {
           </form>
         </div>
 
-        {/* Scrollable Posts Feed */}
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
           {posts.map(post => (
             <div key={post.id} className="border border-green-900/30 bg-green-950/5 p-4 relative group">
@@ -208,7 +226,6 @@ function App() {
                 <span className="text-[8px] text-green-800">ENCRYPTED_ID</span>
               </div>
               <div className="text-sm text-gray-300 leading-relaxed pl-8">{post.content}</div>
-              {/* Fake Actions for aesthetics */}
               <div className="mt-3 pl-8 flex gap-4 text-[9px] text-green-800 font-bold uppercase">
                 <span className="cursor-pointer hover:text-green-500">[ +1 VOUCH ]</span>
                 <span className="cursor-pointer hover:text-green-500">[ COMMENT ]</span>
@@ -218,31 +235,76 @@ function App() {
         </div>
       </div>
 
-      {/* 3. RIGHT SIDEBAR (Global Chat) - 25% width */}
+      {/* 3. RIGHT SIDEBAR (The Comm Link) */}
       <div className="w-1/4 flex flex-col bg-zinc-950/80">
-        <div className="p-3 border-b border-green-900/50 text-[10px] font-bold uppercase tracking-widest text-green-600 bg-black">
-          Global_Chat_Relay
+        
+        {/* Chat Header / Toggle */}
+        <div className="flex border-b border-green-900/50">
+          <button 
+            onClick={() => setChatMode("GLOBAL")}
+            className={"flex-1 p-3 text-[10px] font-bold uppercase " + (chatMode === "GLOBAL" ? "bg-green-900/30 text-white" : "text-green-800 hover:text-green-500")}
+          >
+            GLOBAL
+          </button>
+          <button 
+            onClick={() => setChatMode("PRIVATE")}
+            className={"flex-1 p-3 text-[10px] font-bold uppercase " + (chatMode === "PRIVATE" ? "bg-green-900/30 text-white" : "text-green-800 hover:text-green-500")}
+          >
+            INBOX
+          </button>
         </div>
         
-        {/* Chat Messages */}
+        {/* Chat Body */}
         <div className="flex-1 overflow-y-auto p-3 space-y-3">
-          {messages.map(msg => (
-            <div key={msg.id} className="flex flex-col">
-              <span className="text-[8px] text-green-700 font-bold">{msg.user + ":"}</span>
-              <span className="text-xs text-green-400 break-words">{msg.text}</span>
+          {chatMode === "PRIVATE" && !recipient ? (
+            // User List for Private Chat
+            <div className="space-y-2">
+              <div className="text-[10px] text-gray-500 mb-2">SELECT AGENT TO MESSAGE:</div>
+              {users.filter(u => u.name !== username).map(u => (
+                <div 
+                  key={u.name} 
+                  onClick={() => setRecipient(u.name)} 
+                  className="p-2 border border-green-900/30 hover:bg-green-900/20 cursor-pointer flex items-center gap-2"
+                >
+                  <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                  <span className="text-xs text-green-400">{u.name}</span>
+                </div>
+              ))}
             </div>
-          ))}
+          ) : (
+            // Messages Display
+            <>
+              {chatMode === "PRIVATE" && recipient && (
+                <button onClick={() => setRecipient(null)} className="text-[9px] text-green-600 mb-2 hover:text-white">
+                  {"< BACK TO AGENT LIST"}
+                </button>
+              )}
+              {displayedMessages.map(msg => (
+                <div key={msg.id} className={"flex flex-col " + (msg.user === username ? "items-end" : "items-start")}>
+                  <div className="text-[8px] text-green-700 font-bold mb-1">{msg.user}</div>
+                  <div className={"p-2 text-xs max-w-[90%] " + (msg.user === username ? "bg-green-900/20 text-white border border-green-800" : "bg-black border border-green-900/50 text-green-400")}>
+                    {msg.text}
+                  </div>
+                </div>
+              ))}
+            </>
+          )}
         </div>
 
         {/* Chat Input */}
-        <form onSubmit={handleChatSubmit} className="p-2 border-t border-green-900/50 bg-black">
-          <input 
-            value={chatContent}
-            onChange={(e) => setChatContent(e.target.value)}
-            className="w-full bg-zinc-900 border border-green-900 p-2 outline-none text-xs text-green-400 placeholder-green-900"
-            placeholder="SEND_MESSAGE..."
-          />
-        </form>
+        {(chatMode === "GLOBAL" || (chatMode === "PRIVATE" && recipient)) && (
+          <form onSubmit={handleChatSubmit} className="p-2 border-t border-green-900/50 bg-black flex gap-1">
+            <input 
+              value={chatContent}
+              onChange={(e) => setChatContent(e.target.value)}
+              className="flex-1 bg-zinc-900 border border-green-900 p-2 outline-none text-xs text-green-400 placeholder-green-900"
+              placeholder={chatMode === "GLOBAL" ? "GLOBAL_BROADCAST..." : "PRIVATE_MSG..."}
+            />
+            <button className="bg-green-900 text-black px-3 font-bold text-xs hover:bg-green-500">
+              {">"}
+            </button>
+          </form>
+        )}
       </div>
 
     </div>
